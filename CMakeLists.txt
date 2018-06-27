@@ -7,14 +7,14 @@
 
 cmake_minimum_required (VERSION 3.0.2)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-project (FNC_XNORNET)
-include(CMakeLibs.cmake)
+project (FNC_XNORNET)#项目名称
+include(CMakeLibs.cmake)#包含的cmake
 
 # ================================================================================
-# Reset the C flags
+# Reset the C flags 重置C编译选项
 # ================================================================================
-set(CMAKE_C_FLAGS           "")
-set(CMAKE_C_FLAGS_RELEASE   "")
+set(CMAKE_C_FLAGS           "")# 编译选项
+set(CMAKE_C_FLAGS_RELEASE   "")# 两种编译模式
 set(CMAKE_C_FLAGS_DEBUG     "")
 
 # ================================================================================
@@ -22,7 +22,7 @@ set(CMAKE_C_FLAGS_DEBUG     "")
 # ================================================================================
 
 # Add the include directories
-include_directories(include)
+include_directories(include)#头文件
 
 # ================================================================================
 # C Global Flags
@@ -30,16 +30,17 @@ include_directories(include)
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang")
 
-    # clang - CC flags
-    set(CMAKE_C_FLAGS "-O3 -mavx2 -mfma -ffp-contract=fast -ffast-math -funroll-loops -ftree-vectorize")
+    # clang - CC flags 编译选项 添加 -std=c99  变量可以延迟到使用之前再定义
+    set(CMAKE_C_FLAGS "-O3 -mavx2 -mfma -ffp-contract=fast -ffast-math -funroll-loops -ftree-vectorize -std=c99 ")
 
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 
     # GNU GCC - CC flags
-    set(CMAKE_C_FLAGS "-O3 -mavx2 -mfma -ffp-contract=fast -ffast-math -funroll-loops -ftree-vectorize")
+    set(CMAKE_C_FLAGS "-O3 -mavx2 -mfma -ffp-contract=fast -ffast-math -funroll-loops -ftree-vectorize -std=c99 ")
 
 endif()
 
+# 源文件
 set(SOURCE_FILES
     src/main.c
     src/main.h
@@ -59,9 +60,9 @@ set(SOURCE_FILES
     src/back_prop.h
 )
 
-add_executable(FNC_XNORNET ${SOURCE_FILES})
+add_executable(FNC_XNORNET ${SOURCE_FILES})# 可执行文件
 
-target_link_libraries(FNC_XNORNET m)
+target_link_libraries(FNC_XNORNET m)# 链接
 target_link_libraries(FNC_XNORNET pcm)
 if (DEFINED PCM_DEPENDENCIES)
     add_dependencies(FNC_XNORNET ${PCM_DEPENDENCIES})
