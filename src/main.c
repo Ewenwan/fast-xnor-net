@@ -1,27 +1,27 @@
 #include "main.h"
 #include "perf.h"
 
-int NUM_IMAGES;
-int IMAGE_ROWS;
-int IMAGE_COLS;
+int NUM_IMAGES;// 图像数量
+int IMAGE_ROWS;// 行 680
+int IMAGE_COLS;// 列 480
 
-int N_ROWS_CONV;
+int N_ROWS_CONV;//卷积核尺寸？
 int N_COLS_CONV;
-int N_ROWS_POOL;
+int N_ROWS_POOL;//池化核尺寸？
 int N_COLS_POOL;
-int NUM_TRAIN;
+int NUM_TRAIN;// 训练次数
 int N_BATCHES;
-int TOTAL_FLOPS;
-int NET_TYPE;
+int TOTAL_FLOPS;// 总的运算量
+int NET_TYPE;// 网络类型
 
 int* shuffle_index;
 
 // dimension: 60k*28*28
-tensor input_images;
-int* labels;
+tensor input_images;// mnist 手写字体 图像尺寸 28*28
+int* labels;// 标签
 
-tensor fil_w;
-tensor fil_b;
+tensor fil_w;// 卷积核
+tensor fil_b;// 偏置项
 
 // dimension: BATCH_SIZE*24*24
 tensor conv_t;
@@ -29,7 +29,7 @@ tensor conv_t;
 // dimension: BATCH_SIZE*12*12
 tensor pool_t;
 
-int**** pool_index_i;
+int**** pool_index_i;// 四级指针!!!!!!!!!!!!!!!!!!!!
 int**** pool_index_j;
 
 tensor fully_con_w, fully_con_b, fully_con_out;
@@ -38,10 +38,10 @@ tensor del_max_pool;
 tensor del_conv;
 
 // binarized input batch of images
-int*** bin_input_images;
+int*** bin_input_images;// 图像的二值输入
 double*** betas;
 
-// binarized weights in conv layer
+// binarized weights in conv layer 二值权重矩阵
 int fil_bin_w[NUM_FILS][FIL_ROWS][FIL_COLS];
 double alphas[NUM_FILS];
 
@@ -82,20 +82,20 @@ int main(int argc, char* argv[]){
       return;
     }
 
-    NET_TYPE = argv[1][0] - '0';
+    NET_TYPE = argv[1][0] - '0';// 第二个域(字符串)的第一个字符
     printf("%d\n", NET_TYPE);
 
     if (NET_TYPE == 0)
     {
-      TOTAL_FLOPS = NORMAL_FLOPS;
+      TOTAL_FLOPS = NORMAL_FLOPS;// 全精度
     }
     else if (NET_TYPE == 1)
     {
-      TOTAL_FLOPS = BINARY_FLOPS;
+      TOTAL_FLOPS = BINARY_FLOPS;// 权重二值
     }
     else if (NET_TYPE == 2)
     {
-      TOTAL_FLOPS = XNOR_FLOPS;
+      TOTAL_FLOPS = XNOR_FLOPS;  // 权重和输入都二值
     }
     else
     {
@@ -103,17 +103,41 @@ int main(int argc, char* argv[]){
       return;
     }
 
-    perf_init();
+    perf_init();// IntelPCM is about to be initialized  Performance Counter Monitor(性能计数器监视器 PCM) 
+  // 禁用NMI echo 0 > /proc/sys/kernel/nmi_watchdog   开启 PCM
+  // 开启 msr的使用权限  /dev/cpu/*/msr
+  // MSR全称是“Model-Specific Register（粗暴翻译为：型号特征注册器）”，
+  // 是X86平台提供给Linux Kernel的一个用户级别的接口，
+  // 旨在提供一个方便用户对系统进行debugging，
+  // 执行跟踪以及进一步的性能监控的可靠功能。
+  // 如果你之前使用过perf_event库，或者Intel PCM 库，你应该接触到msr。
+  // 这个模块默认系统是不加载的，如果需要启动此功能，需要首先使用如下命令加载模块：
+  // modprobe msr
+  // 这个时候如果访问/dev/cpu/ 目录，应该会有若干个以数字命名的目录，每一个目录都映射到CPU的一个core上。
+  // 开启权限 chmod 777 /dev/cpu/*/msr
+  
+  // Performance Counter Monitor（PCM）是一个由英特尔开发的，
+  // 也是基于PMU(performance monitoring unit， 性能监视单元，其实CPU提供的一个单元，属于硬件的范畴)一个性能检测工具。
+它// 是运行在msr 内核模块(perf是内核系统调用吧？)上的，提供了C++ API。
+  // 通过访问相关的寄存器能读取到CPU的一些性能数据，
+  // 目前大部分CPU都会提供相应的PMU，下面主要学习Intel系列CPU的PMU。
+  
+  
+  // 使用性能计数器之前，应首先对它们进行初始化。
+  // 完成初始化后，可在相关代码段之前和之后，也就是两个时间点捕获计数器状态。
+  // 不同例程会捕获面向内核、插槽或整个系统的计数器，并将它们的状态存储于相应的数据结构中。
+  // 其它例程则可基于这些状态计算性能指标。
   
     #ifdef COUNT_FLOPS
-      TOTAL_FLOPS = 0;
+      TOTAL_FLOPS = 0;// 记录 运算量
     #endif
 
     //test_tensor();
     //test_reverse_int();
 
     set_paths();
-
+ 
+// 读取手写字体数据集
     read_mnist_images_labels(TRAIN_IMAGES, TRAIN_LABELS, &input_images, &labels);
 
     printf("number_of_images=%d\n", NUM_IMAGES);
@@ -149,14 +173,14 @@ int main(int argc, char* argv[]){
     // dimension: BATCH_SIZE*12*12
     build_args(&pool_t, N_COLS_POOL, N_ROWS_POOL, NUM_FILS, BATCH_SIZE);
 
-    // fully connected layer
+    //全链接层  fully connected layer
     build_args(&fully_con_w, N_COLS_POOL, N_ROWS_POOL, NUM_FILS, N_DIGS);
     build_args(&fully_con_b, 1, 1, N_DIGS, 1);
     build_args(&fully_con_out, 1, 1, N_DIGS, BATCH_SIZE);
 
-    // softmax layer
+    // 归一化分类层 softmax layer
     build_args(&softmax_out, 1, 1, N_DIGS, BATCH_SIZE);
-
+    // 初始化卷积权重和偏置项
     initialize_weights_biases(&fully_con_w, &fully_con_b);
 
     // backprop to max-pool layer
@@ -173,16 +197,16 @@ int main(int argc, char* argv[]){
 
     if (NET_TYPE == 0)
     {
-        normal_net();
+        normal_net();// 全精度网络
     }
     else if (NET_TYPE == 1)
     {
-        binary_net();
+        binary_net();// 权重二值化网络
     }
     else
     {
         int bin_array[BATCH_SIZE][IMAGE_ROWS][IMAGE_COLS];
-        bin_input_images = bin_array;
+        bin_input_images = bin_array;// 输入也二值化
 
         double betas_array[BATCH_SIZE][N_ROWS_CONV][N_COLS_CONV];
         betas = betas_array;
@@ -190,7 +214,7 @@ int main(int argc, char* argv[]){
         // pre-calculate sign(I)
         //binarize_input(&input_images, &bin_input_images);
 
-        xnor_net();
+        xnor_net();// 权重+ 输入 二值化网络
     }
 
     // testing convolution with last image in last batch
@@ -202,7 +226,8 @@ int main(int argc, char* argv[]){
 
     //print_tensor_1d(&fully_con_out, 10, 99);
     //print_tensor_1d(&softmax_out, 10, 99);
-
+    
+    //  释放内存
     destroy(&input_images);
     destroy(&conv_t);
     destroy(&pool_t);
@@ -216,8 +241,9 @@ int main(int argc, char* argv[]){
     return 0;
 }
 
+// 全精度网络
 void normal_net()
-{
+{ //  #define NUM_EPOCHS 20 // 训练20次 定义在 common.h中
     for (int epoch = 0; epoch < NUM_EPOCHS; ++epoch)
     {
         // Shuffle all 60k only once, they keep last 10k for validtion
@@ -340,6 +366,7 @@ void normal_net()
     }
 }
 
+// 权重二值化网络
 void binary_net()
 {
 
@@ -470,6 +497,7 @@ void binary_net()
     }
 }
 
+// 权重+ 输入 二值化网络
 void xnor_net()
 {
 
@@ -634,7 +662,7 @@ int calc_correct_preds(int preds[BATCH_SIZE], int* labels, int num_batch, int sh
     return ret;
 }
 
-
+// 打乱数据集
 void shuffle(int shuffle_index[], int number_of_images){
     srand( time(NULL) );
 
@@ -654,6 +682,7 @@ void shuffle(int shuffle_index[], int number_of_images){
     }
 }
 
+// 全精度网络的 验证 
 double validate(){
 
     int pred[1];
@@ -670,7 +699,7 @@ double validate(){
 
     return (correct_preds*100.0) / NUM_VAL;
 }
-
+// 权重二值网络的 验证
 double bin_validate(){
 
     int pred[1];
@@ -686,7 +715,7 @@ double bin_validate(){
         }
     return (correct_preds*100.0) / NUM_VAL;
 }
-
+// 权重+输入二值网络的验证
 double xnor_validate(){
 
     int pred[1];
@@ -707,7 +736,7 @@ double xnor_validate(){
 
     return (correct_preds*100.0) / NUM_VAL;
 }
-
+// 初始化计数器
 initialize_cycle_counter()
 {
     binarize_cycles = 0;
